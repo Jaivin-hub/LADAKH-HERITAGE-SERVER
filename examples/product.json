@@ -1,0 +1,13 @@
+{
+  "title": "Silver Pendant",
+  "category": "vintage-silver-pendants",
+  "image": "/uploads/silver-pendant-front.jpg",
+  "images": ["/uploads/silver-pendant-front.jpg", "/uploads/silver-pendant-back.jpg"],
+  "description": "Replace with the actual product description.",
+  "materials": "Replace with confirmed materials.",
+  "origin": "Ladakh Heritage · Varkala",
+  "priceINR": null,
+  "badge": "In the store",
+  "sortOrder": 1,
+  "isActive": true
+}

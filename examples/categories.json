@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "silver-jewellery",
+    "title": "Silver Jewellery",
+    "parent": null,
+    "image": "/uploads/silver-jewellery.jpg",
+    "text": "Explore our silver jewellery collection.",
+    "sortOrder": 1,
+    "isActive": true
+  },
+  {
+    "slug": "vintage-silver-pendants",
+    "title": "Vintage Silver Pendants",
+    "parent": "silver-jewellery",
+    "image": "/uploads/vintage-silver-pendants.jpg",
+    "text": "Discover vintage silver pendants.",
+    "sortOrder": 2,
+    "isActive": true
+  }
+]
