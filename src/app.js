@@ -15,6 +15,7 @@ export function createApp({
   origins,
   baseUrl,
   enableAdmin = false,
+  allowRemoteAdmin = false,
   uploads = fileURLToPath(new URL("../uploads/", import.meta.url)),
 }) {
   const app = express();
@@ -48,7 +49,7 @@ export function createApp({
   );
   app.use(
     "/api/admin",
-    adminRouter({ enabled: enableAdmin, origins, baseUrl, uploads }),
+    adminRouter({ enabled: enableAdmin, allowRemote: allowRemoteAdmin, origins, baseUrl, uploads }),
   );
   const categories = async () =>
     publicCategories(

@@ -4,9 +4,10 @@ import { Router, json } from "express";
 import { Category, Product } from "./models.js";
 import { imageUrl } from "./catalogue.js";
 
-export function adminRouter({ enabled, origins, baseUrl, uploads }) {
+export function adminRouter({ enabled, allowRemote = false, origins, baseUrl, uploads }) {
   const router = Router();
-  // Temporary local-development gate; replace with authenticated roles before deployment.
+  // Explicit deployment opt-in until authenticated admin roles are implemented.
+  // Origin validation is not authentication; non-browser clients can forge Origin.
   router.use((req, res, next) => {
     const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
       req.socket.remoteAddress,
@@ -16,21 +17,22 @@ export function adminRouter({ enabled, origins, baseUrl, uploads }) {
       origin &&
       origins.includes(origin) &&
       /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-    if (!enabled || !local || (origin && !localOrigin))
+    const allowedOrigin = allowRemote ? Boolean(origin && origins.includes(origin)) : localOrigin;
+    if (!enabled || (!allowRemote && !local) || (origin && !allowedOrigin))
       return res.status(403).json({
         error:
-          "Admin is available only in local development until login is added.",
+          "Admin access is disabled or this website origin is not allowed.",
       });
     if (
       !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-      (!localOrigin ||
+      (!allowedOrigin ||
         !(req.method === "POST" && req.path === "/uploads"
           ? req.is("multipart/form-data")
           : req.is("application/json")))
     )
       return res
         .status(403)
-        .json({ error: "Use the local admin portal to save changes." });
+        .json({ error: "Use an allowed admin portal to save changes." });
     next();
   });
   router.use(json({ limit: "100kb" }));

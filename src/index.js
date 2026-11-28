@@ -41,8 +41,9 @@ try {
     origins,
     baseUrl,
     enableAdmin:
-      process.env.ENABLE_LOCAL_ADMIN === "true" &&
-      process.env.NODE_ENV !== "production",
+      process.env.ENABLE_ADMIN === "true" ||
+      (process.env.ENABLE_LOCAL_ADMIN === "true" && process.env.NODE_ENV !== "production"),
+    allowRemoteAdmin: process.env.ENABLE_ADMIN === "true",
   }).listen(port, process.env.HOST || "127.0.0.1", () =>
     console.log(`Catalogue API listening on port ${port}; MongoDB connected.`),
   );
