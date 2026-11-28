@@ -225,6 +225,88 @@ test(
         (await get("/api/products?category=portal")).pagination.total,
         1,
       );
+      const mutate = (path, method, body = {}) =>
+        fetch(base + "/api/admin/" + path, {
+          method,
+          headers: {
+            Origin: "http://localhost:5174",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+      const editCategory = await Category.create({
+        slug: "edit-test",
+        title: "Edit test",
+      });
+      const child = await Category.create({
+        slug: "edit-child",
+        title: "Edit child",
+        parent: "edit-test",
+      });
+      const editProduct = await Product.create({
+        title: "Edit product",
+        category: "edit-test",
+        image: "/uploads/test.png",
+        images: ["/uploads/second.png"],
+      });
+      const productPath = `products/${editProduct.id}`;
+      const categoryPath = `categories/${editCategory.id}`;
+      assert.equal(
+        (
+          await mutate(productPath, "PATCH", {
+            title: "Updated product",
+            priceINR: 250,
+          })
+        ).status,
+        200,
+      );
+      const edited = await Product.findById(editProduct.id);
+      assert.equal(edited.title, "Updated product");
+      assert.deepEqual([...edited.images], ["/uploads/second.png"]);
+      assert.equal(
+        (await mutate(productPath, "PATCH", { priceINR: -1 })).status,
+        400,
+      );
+      assert.equal(
+        (await mutate(productPath, "PATCH", { category: "missing" })).status,
+        400,
+      );
+      assert.equal(
+        (await mutate(categoryPath, "PATCH", { title: "Updated category" }))
+          .status,
+        200,
+      );
+      assert.equal(
+        (await mutate(categoryPath, "PATCH", { slug: "changed" })).status,
+        400,
+      );
+      assert.equal(
+        (await mutate(categoryPath, "PATCH", { parent: child.slug })).status,
+        400,
+      );
+      assert.equal((await mutate(categoryPath, "DELETE")).status, 409);
+      assert.equal((await mutate(productPath, "DELETE")).status, 200);
+      assert.equal((await mutate(productPath, "DELETE")).status, 404);
+      assert.equal((await mutate(categoryPath, "DELETE")).status, 409);
+      assert.equal(
+        (await mutate(`categories/${child.id}`, "DELETE")).status,
+        200,
+      );
+      assert.equal((await mutate(categoryPath, "DELETE")).status, 200);
+      assert.equal((await mutate("products/bad-id", "PATCH", {})).status, 400);
+      assert.equal(
+        (
+          await fetch(base + "/api/admin/products/" + items[0].id, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: "https://untrusted.test",
+            },
+            body: "{}",
+          })
+        ).status,
+        403,
+      );
       const admin = await get("/api/admin/catalogue");
       assert.ok(admin.products.some((item) => item.title === "Portal draft"));
       assert.equal(
@@ -242,13 +324,26 @@ test(
         ).status,
         403,
       );
-      const png = await sharp({ create: { width: 16, height: 16, channels: 3, background: "#aabbcc" } }).png().toBuffer();
+      const png = await sharp({
+        create: { width: 16, height: 16, channels: 3, background: "#aabbcc" },
+      })
+        .png()
+        .toBuffer();
       const upload = (files, origin = "http://localhost:5174") => {
         const form = new FormData();
-        files.forEach(([bytes, mime, name]) => form.append("images", new Blob([bytes], { type: mime }), name));
-        return fetch(base + "/api/admin/uploads", { method: "POST", body: form, headers: origin ? { Origin: origin } : {} });
+        files.forEach(([bytes, mime, name]) =>
+          form.append("images", new Blob([bytes], { type: mime }), name),
+        );
+        return fetch(base + "/api/admin/uploads", {
+          method: "POST",
+          body: form,
+          headers: origin ? { Origin: origin } : {},
+        });
       };
-      const uploadedResponse = await upload([[png, "image/png", "first.png"], [png, "image/png", "../../second.png"]]);
+      const uploadedResponse = await upload([
+        [png, "image/png", "first.png"],
+        [png, "image/png", "../../second.png"],
+      ]);
       assert.equal(uploadedResponse.status, 201);
       const uploaded = (await uploadedResponse.json()).images;
       assert.equal(uploaded.length, 2);
@@ -258,22 +353,66 @@ test(
         const file = await fetch(base + item.path);
         assert.equal(file.status, 200);
         assert.match(file.headers.get("content-type"), /image\/webp/);
-        assert.equal((await sharp(Buffer.from(await file.arrayBuffer())).metadata()).width, 16);
+        assert.equal(
+          (await sharp(Buffer.from(await file.arrayBuffer())).metadata()).width,
+          16,
+        );
       }
-      const savedResponse = await post("products", { title: "Uploaded gallery", category: "portal", image: uploaded[1].path, images: [uploaded[0].path] });
+      const savedResponse = await post("products", {
+        title: "Uploaded gallery",
+        category: "portal",
+        image: uploaded[1].path,
+        images: [uploaded[0].path],
+      });
       assert.equal(savedResponse.status, 201);
       const savedId = (await savedResponse.json()).product.id;
       const saved = (await get(`/api/products/${savedId}`)).product;
       assert.ok(saved.image.endsWith(uploaded[1].path));
-      assert.ok(saved.images.some(url => url.endsWith(uploaded[0].path)));
+      assert.ok(saved.images.some((url) => url.endsWith(uploaded[0].path)));
       assert.equal((await upload([])).status, 400);
-      assert.equal((await upload([[png, "image/png", "a.png"]], null)).status, 403);
-      assert.equal((await upload([[png, "image/png", "a.png"]], "https://other.test")).status, 403);
-      assert.equal((await upload([["<svg/>", "image/svg+xml", "test.svg"]])).status, 400);
-      assert.equal((await upload([[png, "image/png", "valid.png"], ["not an image", "image/png", "fake.png"]])).status, 400);
-      assert.equal((await upload([[Buffer.alloc(8 * 1024 * 1024 + 1), "image/png", "large.png"]])).status, 413);
-      assert.equal((await upload(Array.from({length: 13}, () => [png, "image/png", "a.png"]))).status, 400);
-      assert.equal((await readdir(uploads)).length, 2, "Failed batches must not leave files behind");
+      assert.equal(
+        (await upload([[png, "image/png", "a.png"]], null)).status,
+        403,
+      );
+      assert.equal(
+        (await upload([[png, "image/png", "a.png"]], "https://other.test"))
+          .status,
+        403,
+      );
+      assert.equal(
+        (await upload([["<svg/>", "image/svg+xml", "test.svg"]])).status,
+        400,
+      );
+      assert.equal(
+        (
+          await upload([
+            [png, "image/png", "valid.png"],
+            ["not an image", "image/png", "fake.png"],
+          ])
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await upload([
+            [Buffer.alloc(8 * 1024 * 1024 + 1), "image/png", "large.png"],
+          ])
+        ).status,
+        413,
+      );
+      assert.equal(
+        (
+          await upload(
+            Array.from({ length: 13 }, () => [png, "image/png", "a.png"]),
+          )
+        ).status,
+        400,
+      );
+      assert.equal(
+        (await readdir(uploads)).length,
+        2,
+        "Failed batches must not leave files behind",
+      );
       const disabled = createApp({
         origins: ["http://localhost:5174"],
         baseUrl: "http://localhost:4000",

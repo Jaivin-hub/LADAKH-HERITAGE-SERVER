@@ -22,7 +22,7 @@ export function createApp({
   app.use(
     cors({
       origin: (origin, done) => done(null, !origin || origins.includes(origin)),
-      methods: ["GET", "HEAD", "OPTIONS", "POST"],
+      methods: ["GET", "HEAD", "OPTIONS", "POST", "PATCH", "DELETE"],
     }),
   );
   app.use(
