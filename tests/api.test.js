@@ -307,6 +307,24 @@ test(
         ).status,
         403,
       );
+      const parentToRemove = await Category.create({
+        title: "Parent to remove",
+        slug: "parent-to-remove",
+        parent: "silver",
+      });
+      const keptChild = await Category.create({
+        title: "Kept child",
+        slug: "kept-child",
+        parent: parentToRemove.slug,
+      });
+      const moved = await mutate(`categories/${parentToRemove.id}`, "DELETE", {
+        preserveSubcategories: true,
+      });
+      assert.equal(moved.status, 200);
+      assert.equal((await moved.json()).movedSubcategories, 1);
+      assert.equal((await Category.findById(keptChild.id)).parent, "silver");
+      assert.equal(await Category.findById(parentToRemove.id), null);
+      await keptChild.deleteOne();
       const admin = await get("/api/admin/catalogue");
       assert.ok(admin.products.some((item) => item.title === "Portal draft"));
       assert.equal(

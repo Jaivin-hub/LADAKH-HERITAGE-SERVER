@@ -4,7 +4,13 @@ import { Router, json } from "express";
 import { Category, Product } from "./models.js";
 import { imageUrl } from "./catalogue.js";
 
-export function adminRouter({ enabled, allowRemote = false, origins, baseUrl, uploads }) {
+export function adminRouter({
+  enabled,
+  allowRemote = false,
+  origins,
+  baseUrl,
+  uploads,
+}) {
   const router = Router();
   // Explicit deployment opt-in until authenticated admin roles are implemented.
   // Origin validation is not authentication; non-browser clients can forge Origin.
@@ -17,7 +23,9 @@ export function adminRouter({ enabled, allowRemote = false, origins, baseUrl, up
       origin &&
       origins.includes(origin) &&
       /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-    const allowedOrigin = allowRemote ? Boolean(origin && origins.includes(origin)) : localOrigin;
+    const allowedOrigin = allowRemote
+      ? Boolean(origin && origins.includes(origin))
+      : localOrigin;
     if (!enabled || (!allowRemote && !local) || (origin && !allowedOrigin))
       return res.status(403).json({
         error:
@@ -188,19 +196,32 @@ export function adminRouter({ enabled, allowRemote = false, origins, baseUrl, up
     router.delete(`/${resource}/:id`, async (req, res, next) => {
       try {
         const item = await loadRecord(req.params.id, Model);
-        if (
-          resource === "categories" &&
-          ((await Product.exists({ category: item.slug })) ||
-            (await Category.exists({ parent: item.slug })))
-        )
-          return res
-            .status(409)
-            .json({
-              error:
-                "Move or delete this category's products and subcategories first.",
+        let movedSubcategories = 0;
+        if (resource === "categories") {
+          const productCount = await Product.countDocuments({
+            category: item.slug,
+          });
+          if (productCount)
+            return res.status(409).json({
+              error: `This category still contains ${productCount} product(s), including drafts. Move or delete them first.`,
             });
+          const children = await Category.find({ parent: item.slug })
+            .select("title")
+            .lean();
+          if (children.length && req.body?.preserveSubcategories !== true)
+            return res.status(409).json({
+              error: `This category has ${children.length} subcategories: ${children.map((child) => child.title).join(", ")}. Confirm that they should be kept and moved up one level.`,
+            });
+          if (children.length) {
+            const result = await Category.updateMany(
+              { parent: item.slug },
+              { $set: { parent: item.parent || null } },
+            );
+            movedSubcategories = result.modifiedCount;
+          }
+        }
         await item.deleteOne();
-        res.json({ deleted: true, id: String(item._id) });
+        res.json({ deleted: true, id: String(item._id), movedSubcategories });
       } catch (error) {
         next(error);
       }
@@ -210,14 +231,12 @@ export function adminRouter({ enabled, allowRemote = false, origins, baseUrl, up
     if (error.status)
       return res.status(error.status).json({ error: error.message });
     if (error.name === "MulterError")
-      return res
-        .status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400)
-        .json({
-          error:
-            error.code === "LIMIT_FILE_SIZE"
-              ? "Each image must be 8 MB or smaller."
-              : "Upload up to 12 images using the image selector.",
-        });
+      return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+        error:
+          error.code === "LIMIT_FILE_SIZE"
+            ? "Each image must be 8 MB or smaller."
+            : "Upload up to 12 images using the image selector.",
+      });
     if (error.code === 11000)
       return res
         .status(409)
